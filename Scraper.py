@@ -11,7 +11,7 @@ import os
 console = Console()
 
 # Set your Google Maps API key here
-API_KEY = 'YOUR_OWN_API'  # Replace with your actual API key
+API_KEY = 'AIzaSyATi-gEjBGGe-x79hg0BRbfKo0wb1hTGZ8'  # Replace with your actual API key
 
 # Load Spain's borders from a GeoJSON file
 GEOJSON_FILE_PATH = 'C:\\Users\\vps\\Downloads\\esp_adm0.geojson'
@@ -31,12 +31,14 @@ else:
         console.log(f"[bold red]Error loading GeoJSON file: {e}[/bold red]")
 
 # Number of grids to split the bounding box into
-NUM_GRIDS = 1000
+NUM_GRIDS = 10000  # Increase to ensure detailed coverage
 console.log(f"[bold blue]Number of grids set to: {NUM_GRIDS}[/bold blue]")
 
 # Define maximum number of API requests per day
-MAX_REQUESTS_PER_DAY = 1000
+MAX_REQUESTS_PER_DAY = 500000
+MAX_REQUESTS_PER_MINUTE = 2000
 console.log(f"[bold blue]Max API requests per day: {MAX_REQUESTS_PER_DAY}[/bold blue]")
+console.log(f"[bold blue]Max API requests per minute: {MAX_REQUESTS_PER_MINUTE}[/bold blue]")
 
 def create_excel_file(data, filename):
     try:
@@ -72,14 +74,12 @@ def get_places(api_key, query, location, radius):
     identical_count = 0
     next_page_token = None
     total_requests = 0
-    request_attempts = 0
 
     while True:
         try:
             console.log(f"[bold blue]Requesting places for location: {location} with radius {radius}[/bold blue]")
             places_result = gmaps.places_nearby(location=location, radius=radius, type='lodging', page_token=next_page_token)
             total_requests += 1
-            request_attempts = 0  # Reset request attempts on successful response
             console.log(f"[bold blue]Total requests so far: {total_requests}[/bold blue]")
 
             for place in places_result.get('results', []):
@@ -105,25 +105,15 @@ def get_places(api_key, query, location, radius):
                 break
             time.sleep(2)  # Avoid hitting the rate limit
 
-            # Check if the request limit is reached
-            if total_requests >= MAX_REQUESTS_PER_DAY:
-                console.log("[bold red]API request limit reached. Pausing until next day.[/bold red]")
-                # Calculate the time until midnight
-                now = datetime.now()
-                midnight = datetime.combine(now.date() + timedelta(days=1), datetime.min.time())
-                sleep_seconds = (midnight - now).total_seconds()
-                console.log(f"Sleeping for {sleep_seconds / 3600:.2f} hours.")
-                time.sleep(sleep_seconds)
-                total_requests = 0  # Reset the request count for the new day
+            # Check if the request limit per minute is reached
+            if total_requests % MAX_REQUESTS_PER_MINUTE == 0:
+                console.log(f"[bold red]Rate limit reached. Pausing for a minute...[/bold red]")
+                time.sleep(60)  # Pause to respect the rate limit
 
         except googlemaps.exceptions.ApiError as e:
             if 'OVER_QUERY_LIMIT' in str(e):
                 console.log("[bold red]Reached API rate limit. Waiting before retrying...[/bold red]")
                 time.sleep(10)  # Wait before retrying
-                request_attempts += 1
-                if request_attempts >= 5:
-                    console.log("[bold red]Maximum request attempts reached. Exiting...[/bold red]")
-                    break  # Avoid endless loop if limit repeatedly hit
             else:
                 console.log(f"[bold red]API Error fetching places: {e}[/bold red]")
                 break
@@ -139,13 +129,14 @@ def generate_grid_coordinates(borders, num_grids):
     try:
         console.log(f"[bold blue]Generating grid coordinates with {num_grids} grids...[/bold blue]")
         min_lng, min_lat, max_lng, max_lat = borders.bounds
-        lat_step = (max_lat - min_lat) / (num_grids ** 0.5)
-        lng_step = (max_lng - min_lng) / (num_grids ** 0.5)
+        grid_size = int(num_grids ** 0.5) + 1  # Ensure at least num_grids points
+        lat_step = (max_lat - min_lat) / grid_size
+        lng_step = (max_lng - min_lng) / grid_size
         coordinates = []
         lat = min_lat
-        while lat < max_lat:
+        while lat <= max_lat:
             lng = min_lng
-            while lng < max_lng:
+            while lng <= max_lng:
                 point = Point(lng + lng_step / 2, lat + lat_step / 2)
                 if borders.contains(point):
                     coordinates.append((point.y, point.x))
@@ -184,6 +175,7 @@ def main():
         data = get_places(api_key, query, coord, radius)
         all_data.extend(data)
         console.log(f"[bold blue]Completed fetching data for grid {i + 1}/{total_coordinates}[/bold blue]")
+        # Optionally, add a sleep to respect the API's rate limit
         time.sleep(1)
 
     if all_data:
