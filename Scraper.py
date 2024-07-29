@@ -184,7 +184,6 @@ def main():
         data = get_places(api_key, query, coord, radius)
         all_data.extend(data)
         console.log(f"[bold blue]Completed fetching data for grid {i + 1}/{total_coordinates}[/bold blue]")
-        # Optionally, add a sleep to respect the API's rate limit
         time.sleep(1)
 
     if all_data:
