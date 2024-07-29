@@ -11,7 +11,7 @@ import os
 console = Console()
 
 # Set your Google Maps API key here
-API_KEY = 'YOUR_Ow'  # Replace with your actual API key
+API_KEY = 'Your_Own_Api'  # Replace with your actual API key
 
 # Load Spain's borders from a GeoJSON file
 GEOJSON_FILE_PATH = 'C:\\Users\\vps\\Downloads\\esp_adm0.geojson'
